@@ -59,6 +59,26 @@ int generate_iv(unsigned char *iv)
 	return(0);
 }
 
+int generate_newiv(const unsigned char *iv, unsigned char *newiv)
+{
+	if(!iv) return(1);
+	if(!newiv) return(1);
+	int fd=open("/dev/urandom", O_RDONLY);
+	if(fd<0)
+		return(-1);
+	unsigned char hiv[IV_LENGTH/2];
+	ssize_t b=readall(fd, hiv, IV_LENGTH/2);
+	close(fd);
+	if(b<0) return(-2);
+	if(!b) return(2);
+	for(size_t i=0;i<IV_LENGTH/2;i++)
+	{
+		newiv[i<<1]=iv[i<<1]^hiv[i];
+		newiv[(i<<1)|1]=iv[(i<<1)|1]^hiv[i];
+	}
+	return(0);
+}
+
 int generate_key_data(size_t key_len, unsigned char *key)
 {
 	if(!key_len) return(3);

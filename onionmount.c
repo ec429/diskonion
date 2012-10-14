@@ -36,6 +36,7 @@
 
 #include <fuse.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <string.h>
 #include <sys/file.h>
 #include <sys/mman.h>
@@ -116,6 +117,11 @@ static int onion_readdir(const char *path, void *buf, fuse_fill_dir_t filler, of
 	return(-ENOENT);
 }
 
+static int onion_truncate(const char *path, off_t offset)
+{
+	return(0); // do nothing, because you can't truncate either file.  But we lie about it, because otherwise editing the files is impossible
+}
+
 static int onion_open(const char *path, struct fuse_file_info *fi)
 {
 	if(fi->flags&O_SYNC) return(-ENOSYS);
@@ -194,9 +200,9 @@ static int onion_read(const char *path, char *buf, size_t size, off_t offset, st
 			pthread_rwlock_rdlock(&mx);
 			while(rb<size)
 			{
-				if(blk>=nblk)
+				if(blk>nblk)
 					break;
-				unsigned char *block=im+(blk+1)*BLOCK_LENGTH;
+				unsigned char *block=im+blk*BLOCK_LENGTH;
 				if(rb)
 				{
 					size_t left=size-rb;
@@ -222,7 +228,119 @@ static int onion_read(const char *path, char *buf, size_t size, off_t offset, st
 
 static int onion_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
-	return(-ENOSYS);
+	switch(fi->fh)
+	{
+		case 1: // data
+		{
+			size_t blk=offset/SECTOR_LENGTH;
+			size_t rb=0;
+			pthread_rwlock_wrlock(&mx);
+			unsigned char derivedkey[header.key_size];
+			unsigned char decodedblk[SECTOR_LENGTH];
+			while(rb<size)
+			{
+				if(blk>=nblk)
+					break;
+				size_t left=size-rb;
+				if(left>SECTOR_LENGTH) left=SECTOR_LENGTH;
+				size_t off=offset%SECTOR_LENGTH;
+				bool partial_write;
+				partial_write=(left<SECTOR_LENGTH)||(off&&!rb);
+				unsigned char *block=im+(blk+1)*BLOCK_LENGTH;
+				if(partial_write)
+				{
+					int e;
+					if((e=derive_key(header.key_len, header.key_data, header.key_size, derivedkey, header.key_stride, blk)))
+					{
+						fprintf(stderr, "Error on block %zu:\n", blk);
+						if(e<0) perror("derive_key");
+						else fprintf(stderr, "derive_key failed with code %d\n", e);
+						pthread_rwlock_unlock(&mx);
+						return(-EIO);
+					}
+					if((e=decrypt_sector(header.key_size, derivedkey, block, block+IV_LENGTH, decodedblk)))
+					{
+						fprintf(stderr, "Error on block %zu:\n", blk);
+						if(e<0) perror("decrypt_sector");
+						else fprintf(stderr, "decrypt_sector failed with code %d\n", e);
+						pthread_rwlock_unlock(&mx);
+						return(-EIO);
+					}
+				}
+				if(rb)
+				{
+					memcpy(decodedblk, buf+rb, left);
+					rb+=left;
+				}
+				else
+				{
+					size_t bytes=SECTOR_LENGTH-off;
+					if(left<bytes) bytes=left;
+					memcpy(decodedblk+off, buf, bytes);
+					rb=bytes;
+				}
+				int e;
+				if((e=derive_key(header.key_len, header.key_data, header.key_size, derivedkey, header.key_stride, blk)))
+				{
+					fprintf(stderr, "Error on block %zu:\n", blk);
+					if(e<0) perror("derive_key");
+					else fprintf(stderr, "derive_key failed with code %d\n", e);
+					pthread_rwlock_unlock(&mx);
+					return(-EIO);
+				}
+				if((e=generate_newiv(block, block)))
+				{
+					fprintf(stderr, "Error on block %zu:\n", blk);
+					if(e<0) perror("generate_newiv");
+					else fprintf(stderr, "generate_newiv failed with code %d\n", e);
+					pthread_rwlock_unlock(&mx);
+					return(-EIO);
+				}
+				if((e=encrypt_sector(header.key_size, derivedkey, block, decodedblk, block+IV_LENGTH)))
+				{
+					fprintf(stderr, "Error on block %zu:\n", blk);
+					if(e<0) perror("encrypt_sector");
+					else fprintf(stderr, "encrypt_sector failed with code %d\n", e);
+					pthread_rwlock_unlock(&mx);
+					return(-EIO);
+				}
+				blk++;
+			}
+			pthread_rwlock_unlock(&mx);
+			return(rb);
+		}
+		case 2: // keystream
+			return(-ENOSYS);
+		/*{
+			size_t blk=offset/IV_LENGTH;
+			size_t rb=0;
+			pthread_rwlock_rdlock(&mx);
+			while(rb<size)
+			{
+				if(blk>=nblk)
+					break;
+				unsigned char *block=im+(blk+1)*BLOCK_LENGTH;
+				if(rb)
+				{
+					size_t left=size-rb;
+					if(left>IV_LENGTH) left=IV_LENGTH;
+					memcpy(buf+rb, block, left);
+					rb+=left;
+				}
+				else
+				{
+					size_t off=offset%IV_LENGTH;
+					memcpy(buf, block+off, IV_LENGTH-off);
+					rb=IV_LENGTH-off;
+				}
+				blk++;
+			}
+			pthread_rwlock_unlock(&mx);
+			return(rb);
+		}*/
+		default:
+			return(-EBADF);
+	}
 }
 
 static struct fuse_operations onion_oper = {
@@ -238,9 +356,9 @@ static struct fuse_operations onion_oper = {
 	.rename		= onion_rename,
 	.link		= onion_link,
 	.chmod		= onion_chmod,
-	.chown		= onion_chown,
+	.chown		= onion_chown,*/
 	.truncate	= onion_truncate,
-	.utimens	= onion_utimens,*/
+	/*.utimens	= onion_utimens,*/
 	.open		= onion_open,
 	.read		= onion_read,
 	.write		= onion_write,

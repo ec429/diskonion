@@ -45,6 +45,7 @@
 
 // For these functions, a return of 0 indicates success, positive indicates failure, and negative indicates failure with errno set
 int generate_iv(unsigned char *iv); // generates a random IV and stores it in iv (whose length should be IV_LENGTH).  Uses /dev/urandom
+int generate_newiv(const unsigned char *iv, unsigned char *newiv); // generates a random new IV with the same keystream as iv and stores it in newiv.  Uses /dev/urandom
 int generate_key_data(size_t key_len, unsigned char *key); // generates random key data of length key_len bytes and stores it in key.  Uses /dev/random
 int encrypt_sector(size_t key_len, unsigned char *restrict key, const unsigned char *restrict iv, unsigned char *restrict sector_in, unsigned char *restrict sector_out); // encrypts a sector of length SECTOR_LENGTH using the specified key and IV, storing the result in sector_out (which should also be of length SECTOR_LENGTH, ie. the IV is not prepended).  key_len is in BYTES
 int decrypt_sector(size_t key_len, unsigned char *restrict key, const unsigned char *restrict iv, unsigned char *restrict sector_in, unsigned char *restrict sector_out); // decrypts a sector of length SECTOR_LENGTH using the specified key and IV, storing the result in sector_out.  key_len is in BYTES
