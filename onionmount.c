@@ -91,9 +91,9 @@ static int onion_getattr(const char *path, struct stat *st)
 		pthread_rwlock_rdlock(&mx);
 		st->st_mode=S_IFREG | S_IRUSR | S_IWUSR;
 		st->st_nlink=1;
-		st->st_size=nblk*IV_LENGTH;
+		st->st_size=nblk*KS_BLKLEN;
 		st->st_blocks=(st->st_size+511)/512;
-		st->st_blksize=IV_LENGTH;
+		st->st_blksize=KS_BLKLEN;
 		pthread_rwlock_unlock(&mx);
 		return(0);
 	}
