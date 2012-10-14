@@ -149,7 +149,6 @@ static int onion_read(const char *path, char *buf, size_t size, off_t offset, st
 			unsigned char decodedblk[SECTOR_LENGTH];
 			while(rb<size)
 			{
-				fprintf(stderr, "blk %zu, rb %zu\n", blk, rb);
 				if(blk>=nblk)
 					break;
 				int e;
@@ -174,14 +173,12 @@ static int onion_read(const char *path, char *buf, size_t size, off_t offset, st
 				{
 					size_t left=size-rb;
 					if(left>SECTOR_LENGTH) left=SECTOR_LENGTH;
-					fprintf(stderr, "left %zu\n", left);
 					memcpy(buf+rb, decodedblk, left);
 					rb+=left;
 				}
 				else
 				{
 					size_t off=offset%SECTOR_LENGTH;
-					fprintf(stderr, "off %zu\n", off);
 					memcpy(buf, decodedblk+off, SECTOR_LENGTH-off);
 					rb=SECTOR_LENGTH-off;
 				}
@@ -191,7 +188,33 @@ static int onion_read(const char *path, char *buf, size_t size, off_t offset, st
 			return(rb);
 		}
 		case 2: // keystream
-			return(-ENOSYS);
+		{
+			size_t blk=offset/IV_LENGTH;
+			size_t rb=0;
+			pthread_rwlock_rdlock(&mx);
+			while(rb<size)
+			{
+				if(blk>=nblk)
+					break;
+				unsigned char *block=im+(blk+1)*BLOCK_LENGTH;
+				if(rb)
+				{
+					size_t left=size-rb;
+					if(left>IV_LENGTH) left=IV_LENGTH;
+					memcpy(buf+rb, block, left);
+					rb+=left;
+				}
+				else
+				{
+					size_t off=offset%IV_LENGTH;
+					memcpy(buf, block+off, IV_LENGTH-off);
+					rb=IV_LENGTH-off;
+				}
+				blk++;
+			}
+			pthread_rwlock_unlock(&mx);
+			return(rb);
+		}
 		default:
 			return(-EBADF);
 	}
