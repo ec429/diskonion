@@ -195,26 +195,36 @@ static int onion_read(const char *path, char *buf, size_t size, off_t offset, st
 		}
 		case 2: // keystream
 		{
-			size_t blk=offset/IV_LENGTH;
+			size_t blk=offset/KS_BLKLEN;
 			size_t rb=0;
+			unsigned char ks[KS_BLKLEN];
 			pthread_rwlock_rdlock(&mx);
 			while(rb<size)
 			{
-				if(blk>nblk)
+				if(blk>=nblk)
 					break;
-				unsigned char *block=im+blk*BLOCK_LENGTH;
+				unsigned char *block=im+(blk+1)*BLOCK_LENGTH;
+				int e;
+				if((e=decode_keystream(block, ks)))
+				{
+					fprintf(stderr, "Error on block %zu:\n", blk);
+					if(e<0) perror("decode_keystream");
+					else fprintf(stderr, "decode_keystream failed with code %d\n", e);
+					pthread_rwlock_unlock(&mx);
+					return(-EIO);
+				}
 				if(rb)
 				{
 					size_t left=size-rb;
-					if(left>IV_LENGTH) left=IV_LENGTH;
-					memcpy(buf+rb, block, left);
+					if(left>KS_BLKLEN) left=KS_BLKLEN;
+					memcpy(buf+rb, ks, left);
 					rb+=left;
 				}
 				else
 				{
-					size_t off=offset%IV_LENGTH;
-					memcpy(buf, block+off, IV_LENGTH-off);
-					rb=IV_LENGTH-off;
+					size_t off=offset%KS_BLKLEN;
+					memcpy(buf, ks+off, KS_BLKLEN-off);
+					rb=KS_BLKLEN-off;
 				}
 				blk++;
 			}
@@ -310,34 +320,79 @@ static int onion_write(const char *path, const char *buf, size_t size, off_t off
 			return(rb);
 		}
 		case 2: // keystream
-			return(-ENOSYS);
-		/*{
-			size_t blk=offset/IV_LENGTH;
+		{
+			size_t blk=offset/KS_BLKLEN;
 			size_t rb=0;
-			pthread_rwlock_rdlock(&mx);
+			pthread_rwlock_wrlock(&mx);
+			unsigned char derivedkey[header.key_size];
+			unsigned char decodedblk[SECTOR_LENGTH];
+			unsigned char keyblk[KS_BLKLEN];
 			while(rb<size)
 			{
 				if(blk>=nblk)
 					break;
+				size_t left=size-rb;
+				if(left>KS_BLKLEN) left=KS_BLKLEN;
+				size_t off=offset%KS_BLKLEN;
 				unsigned char *block=im+(blk+1)*BLOCK_LENGTH;
+				int e;
+				if((e=derive_key(header.key_len, header.key_data, header.key_size, derivedkey, header.key_stride, blk)))
+				{
+					fprintf(stderr, "Error on block %zu:\n", blk);
+					if(e<0) perror("derive_key");
+					else fprintf(stderr, "derive_key failed with code %d\n", e);
+					pthread_rwlock_unlock(&mx);
+					return(-EIO);
+				}
+				if((e=decrypt_sector(header.key_size, derivedkey, block, block+IV_LENGTH, decodedblk)))
+				{
+					fprintf(stderr, "Error on block %zu:\n", blk);
+					if(e<0) perror("decrypt_sector");
+					else fprintf(stderr, "decrypt_sector failed with code %d\n", e);
+					pthread_rwlock_unlock(&mx);
+					return(-EIO);
+				}
+				if((e=decode_keystream(block, keyblk)))
+				{
+					fprintf(stderr, "Error on block %zu:\n", blk);
+					if(e<0) perror("decode_keystream");
+					else fprintf(stderr, "decode_keystream failed with code %d\n", e);
+					pthread_rwlock_unlock(&mx);
+					return(-EIO);
+				}
 				if(rb)
 				{
-					size_t left=size-rb;
-					if(left>IV_LENGTH) left=IV_LENGTH;
-					memcpy(buf+rb, block, left);
+					memcpy(keyblk, buf+rb, left);
 					rb+=left;
 				}
 				else
 				{
-					size_t off=offset%IV_LENGTH;
-					memcpy(buf, block+off, IV_LENGTH-off);
-					rb=IV_LENGTH-off;
+					size_t bytes=KS_BLKLEN-off;
+					if(left<bytes) bytes=left;
+					memcpy(keyblk+off, buf, bytes);
+					rb=bytes;
+				}
+				if((e=encode_keystream(keyblk, block)))
+				{
+					fprintf(stderr, "Error on block %zu:\n", blk);
+					if(e<0) perror("encode_keystream");
+					else fprintf(stderr, "encode_keystream failed with code %d\n", e);
+					pthread_rwlock_unlock(&mx);
+					return(-EIO);
+				}
+				if((e=encrypt_sector(header.key_size, derivedkey, block, decodedblk, block+IV_LENGTH)))
+				{
+					fprintf(stderr, "Error on block %zu:\n", blk);
+					if(e<0) perror("encrypt_sector");
+					else fprintf(stderr, "encrypt_sector failed with code %d\n", e);
+					pthread_rwlock_unlock(&mx);
+					return(-EIO);
 				}
 				blk++;
 			}
 			pthread_rwlock_unlock(&mx);
 			return(rb);
-		}*/
+		}
 		default:
 			return(-EBADF);
 	}

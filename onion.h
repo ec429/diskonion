@@ -35,3 +35,5 @@
 #include <stdlib.h>
 
 int derive_key(size_t data_len, const unsigned char *restrict data, size_t key_len, unsigned char *restrict key, size_t stride, size_t index); // derives a key according to the "derived sector key" rules
+int decode_keystream(const unsigned char *restrict iv, unsigned char *restrict ks); // decodes the IV_LENGTH/2 byte keystream block from the IV
+int encode_keystream(const unsigned char *restrict ks, unsigned char *restrict iv); // creates a new IV encoding the given keystream block

@@ -33,6 +33,7 @@
 */
 
 #include "onion.h"
+#include "crypto.h"
 
 int derive_key(size_t data_len, const unsigned char *restrict data, size_t key_len, unsigned char *restrict key, size_t stride, size_t index)
 {
@@ -42,4 +43,25 @@ int derive_key(size_t data_len, const unsigned char *restrict data, size_t key_l
 	for(size_t i=0;i<key_len;i++)
 		key[i]=data[(R+i)%data_len];
 	return(0);
+}
+
+int decode_keystream(const unsigned char *restrict iv, unsigned char *restrict ks)
+{
+	if(!iv) return(1);
+	if(!ks) return(2);
+	for(size_t i=0;i<IV_LENGTH/2;i++)
+		ks[i]=iv[i<<1]^iv[(i<<1)|1];
+	return(0);
+}
+
+int encode_keystream(const unsigned char *restrict ks, unsigned char *restrict iv)
+{
+	if(!iv) return(3);
+	if(!ks) return(4);
+	for(size_t i=0;i<IV_LENGTH/2;i++)
+	{
+		iv[i<<1]=ks[i];
+		iv[(i<<1)|1]=0;
+	}
+	return(generate_newiv(iv, iv));
 }
