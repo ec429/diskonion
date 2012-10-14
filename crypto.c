@@ -38,6 +38,12 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#ifdef INSUFFICIENTLY_PARANOID
+#define STRONG_RAND	"/dev/urandom"
+#else
+#define STRONG_RAND	"/dev/random"
+#endif
+
 int generate_iv(unsigned char *iv)
 {
 	if(!iv) return(1);
@@ -62,7 +68,7 @@ int generate_key_data(size_t key_len, unsigned char *key)
 {
 	if(!key_len) return(3);
 	if(!key) return(1);
-	int fd=open("/dev/random", O_RDONLY);
+	int fd=open(STRONG_RAND, O_RDONLY);
 	if(fd<0)
 		return(-1);
 	size_t i=0;

@@ -2,6 +2,8 @@
 
 CC := gcc
 CFLAGS := -Wall -Wextra -Werror -pedantic --std=gnu99 -g
+CPPFLAGS := -DINSUFFICIENTLY_PARANOID # this is temporary, for debugging/development
+
 LDCRYPTO := -lssl
 
 all: mkonion
