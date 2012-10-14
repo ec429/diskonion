@@ -34,9 +34,11 @@
 
 #include "crypto.h"
 #include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include "bits.h"
 
 #ifdef INSUFFICIENTLY_PARANOID
 #define STRONG_RAND	"/dev/urandom"
@@ -50,14 +52,7 @@ int generate_iv(unsigned char *iv)
 	int fd=open("/dev/urandom", O_RDONLY);
 	if(fd<0)
 		return(-1);
-	size_t i=0;
-	ssize_t b;
-	while(i<IV_LENGTH)
-	{
-		b=read(fd, iv+i, IV_LENGTH-i);
-		if(b<=0) break;
-		i+=b;
-	}
+	ssize_t b=readall(fd, iv, IV_LENGTH);
 	close(fd);
 	if(b<0) return(-2);
 	if(!b) return(2);
@@ -71,6 +66,7 @@ int generate_key_data(size_t key_len, unsigned char *key)
 	int fd=open(STRONG_RAND, O_RDONLY);
 	if(fd<0)
 		return(-1);
+	// we don't use readall() here, so that we can have our progress dots
 	size_t i=0;
 	size_t d=0;
 	ssize_t b;
@@ -92,18 +88,22 @@ int generate_key_data(size_t key_len, unsigned char *key)
 	return(0);
 }
 
-int encrypt_sector(size_t key_len, unsigned char *restrict key, unsigned char *restrict iv, unsigned char *restrict sector_in, unsigned char *restrict sector_out)
+int encrypt_sector(size_t key_len, unsigned char *restrict key, const unsigned char *restrict iv, unsigned char *restrict sector_in, unsigned char *restrict sector_out)
 {
+	unsigned char siv[IV_LENGTH];
+	memcpy(siv, iv, IV_LENGTH);
 	AES_KEY akey;
 	if(AES_set_encrypt_key(key, key_len<<3, &akey)) return(1);
-	AES_cbc_encrypt(sector_in, sector_out, SECTOR_LENGTH, &akey, iv, AES_ENCRYPT);
+	AES_cbc_encrypt(sector_in, sector_out, SECTOR_LENGTH, &akey, siv, AES_ENCRYPT);
 	return(0);
 }
 
-int decrypt_sector(size_t key_len, unsigned char *restrict key, unsigned char *restrict iv, unsigned char *restrict sector_in, unsigned char *restrict sector_out)
+int decrypt_sector(size_t key_len, unsigned char *restrict key, const unsigned char *restrict iv, unsigned char *restrict sector_in, unsigned char *restrict sector_out)
 {
+	unsigned char siv[IV_LENGTH];
+	memcpy(siv, iv, IV_LENGTH);
 	AES_KEY akey;
 	if(AES_set_decrypt_key(key, key_len<<3, &akey)) return(1);
-	AES_cbc_encrypt(sector_in, sector_out, SECTOR_LENGTH, &akey, iv, AES_DECRYPT);
+	AES_cbc_encrypt(sector_in, sector_out, SECTOR_LENGTH, &akey, siv, AES_DECRYPT);
 	return(0);
 }

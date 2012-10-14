@@ -33,7 +33,6 @@
 */
 
 #include <stdio.h>
-#include <stdint.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -41,12 +40,10 @@
 #include <fcntl.h>
 #include "crypto.h"
 #include "onion.h"
+#include "bits.h"
 
 #define SECTOR_KEY_LENGTH	(SECTOR_LENGTH-0x10) // should be 4064
 #define SECTOR_KEY_STRIDE	13 // coprime to 4064
-
-void write32be(uint32_t val, unsigned char *buf);
-int writeall(int fd, const unsigned char *buf, size_t count);
 
 int main(int argc, char *argv[])
 {
@@ -102,16 +99,25 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Must supply -o<outfile>\n");
 		return(1);
 	}
-	if(!sz)
+	struct stat st_buf;
+	if(stat(outfile, &st_buf))
 	{
-		struct stat st_buf;
-		if(stat(outfile, &st_buf))
+		if(!sz)
 		{
 			perror("Failed to stat outfile: stat");
 			return(1);
 		}
-		sz=st_buf.st_size;
 	}
+	else if(sz)
+	{
+		if(sz!=(size_t)st_buf.st_size)
+		{
+			fprintf(stderr, "Size mismatch; volume is %zu bytes\n", (size_t)st_buf.st_size);
+			return(1);
+		}
+	}
+	else
+		sz=st_buf.st_size;
 	int outfd=open(outfile, O_WRONLY | O_CREAT, S_IRUSR|S_IWUSR);
 	if(outfd<0)
 	{
@@ -145,7 +151,7 @@ int main(int argc, char *argv[])
 	}
 	fprintf(stderr, "Preparing header sector\n");
 	unsigned char headersector[SECTOR_LENGTH];
-	write32be(SECTOR_LENGTH, headersector);
+	write32be(BLOCK_LENGTH, headersector);
 	write32be(KEY_LENGTH_HIGH, headersector+0x4);
 	write32be(SECTOR_KEY_LENGTH, headersector+0x8);
 	write32be(SECTOR_KEY_STRIDE, headersector+0xC);
@@ -215,25 +221,4 @@ int main(int argc, char *argv[])
 	}
 	fprintf(stderr, "Finished creating the image, all OK\n");
 	return(0);
-}
-
-void write32be(uint32_t val, unsigned char *buf)
-{
-	buf[0]=(val>>24)&0xFF;
-	buf[1]=(val>>16)&0xFF;
-	buf[2]=(val>>8)&0xFF;
-	buf[3]=(val)&0xFF;
-}
-
-int writeall(int fd, const unsigned char *buf, size_t count)
-{
-	size_t i=0;
-	ssize_t b;
-	while(i<count)
-	{
-		b=write(fd, buf+i, count-i);
-		if(b<=0) return(b);
-		i+=b;
-	}
-	return(i);
 }

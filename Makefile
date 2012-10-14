@@ -9,11 +9,13 @@ LDCRYPTO := -lssl
 
 all: mkonion onionmount
 
-onionmount: onionmount.c crypto.o crypto.h onion.o onion.h
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(FUSE) onionmount.c $(LDFLAGS) crypto.o onion.o $(LDFUSE) $(LDCRYPTO) -o $@
+onionmount: onionmount.c crypto.o crypto.h onion.o onion.h bits.o bits.h
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(FUSE) onionmount.c $(LDFLAGS) crypto.o onion.o bits.o $(LDFUSE) $(LDCRYPTO) -o $@
 
-mkonion: mkonion.c crypto.o crypto.h onion.o onion.h
-	$(CC) $(CFLAGS) $(CPPFLAGS) mkonion.c $(LDFLAGS) crypto.o onion.o $(LDCRYPTO) -o $@
+mkonion: mkonion.c crypto.o crypto.h onion.o onion.h bits.o bits.h
+	$(CC) $(CFLAGS) $(CPPFLAGS) mkonion.c $(LDFLAGS) crypto.o onion.o bits.o $(LDCRYPTO) -o $@
+
+crypto.o: bits.h
 
 %.o: %.c %.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@

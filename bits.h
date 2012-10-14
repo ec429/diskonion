@@ -29,22 +29,13 @@
 	version.  If you delete this exception statement from all source
 	files in the program, then also delete it here.
 	
-	crypto.h: crypto functions abstraction layer
+	bits.h: general common functions
 */
 
+#include <stdint.h>
 #include <sys/types.h>
-#include <openssl/aes.h>
 
-// These lengths are in bytes (not bits as is common in many crypto contexts)
-#define BLOCK_LENGTH	4096
-#define IV_LENGTH		AES_BLOCK_SIZE
-#define SECTOR_LENGTH	(BLOCK_LENGTH-IV_LENGTH)
-#define KEY_LENGTH_LOW	16
-#define KEY_LENGTH_MED	24
-#define KEY_LENGTH_HIGH	32
-
-// For these functions, a return of 0 indicates success, positive indicates failure, and negative indicates failure with errno set
-int generate_iv(unsigned char *iv); // generates a random IV and stores it in iv (whose length should be IV_LENGTH).  Uses /dev/urandom
-int generate_key_data(size_t key_len, unsigned char *key); // generates random key data of length key_len bytes and stores it in key.  Uses /dev/random
-int encrypt_sector(size_t key_len, unsigned char *restrict key, const unsigned char *restrict iv, unsigned char *restrict sector_in, unsigned char *restrict sector_out); // encrypts a sector of length SECTOR_LENGTH using the specified key and IV, storing the result in sector_out (which should also be of length SECTOR_LENGTH, ie. the IV is not prepended).  key_len is in BYTES
-int decrypt_sector(size_t key_len, unsigned char *restrict key, const unsigned char *restrict iv, unsigned char *restrict sector_in, unsigned char *restrict sector_out); // decrypts a sector of length SECTOR_LENGTH using the specified key and IV, storing the result in sector_out.  key_len is in BYTES
+void write32be(uint32_t val, unsigned char *buf);
+uint32_t read32be(const unsigned char *buf);
+ssize_t writeall(int fd, const unsigned char *buf, size_t count);
+ssize_t readall(int fd, unsigned char *buf, size_t count);

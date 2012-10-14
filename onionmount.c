@@ -44,13 +44,21 @@
 #include <errno.h>
 #include "crypto.h"
 #include "onion.h"
+#include "bits.h"
 
 pthread_rwlock_t mx; // image mutex
-char *im=NULL; // image map
+unsigned char *im=NULL; // image map
 size_t i_sz; // image size
 size_t nblk; // number of blocks (excl. header)
 uid_t uid;
 gid_t gid;
+
+struct
+{
+	size_t key_size, key_len, key_stride;
+	unsigned char *key_data; // this is a pointer into im, so reads must acquire rdlock on mx
+}
+header;
 
 static int onion_getattr(const char *path, struct stat *st)
 {
@@ -133,7 +141,55 @@ static int onion_read(const char *path, char *buf, size_t size, off_t offset, st
 	switch(fi->fh)
 	{
 		case 1: // data
-			return(-ENOSYS);
+		{
+			size_t blk=offset/SECTOR_LENGTH;
+			size_t rb=0;
+			pthread_rwlock_rdlock(&mx);
+			unsigned char derivedkey[header.key_size];
+			unsigned char decodedblk[SECTOR_LENGTH];
+			while(rb<size)
+			{
+				fprintf(stderr, "blk %zu, rb %zu\n", blk, rb);
+				if(blk>=nblk)
+					break;
+				int e;
+				if((e=derive_key(header.key_len, header.key_data, header.key_size, derivedkey, header.key_stride, blk)))
+				{
+					fprintf(stderr, "Error on block %zu:\n", blk);
+					if(e<0) perror("derive_key");
+					else fprintf(stderr, "derive_key failed with code %d\n", e);
+					pthread_rwlock_unlock(&mx);
+					return(-EIO);
+				}
+				unsigned char *block=im+(blk+1)*BLOCK_LENGTH;
+				if((e=decrypt_sector(header.key_size, derivedkey, block, block+IV_LENGTH, decodedblk)))
+				{
+					fprintf(stderr, "Error on block %zu:\n", blk);
+					if(e<0) perror("decrypt_sector");
+					else fprintf(stderr, "decrypt_sector failed with code %d\n", e);
+					pthread_rwlock_unlock(&mx);
+					return(-EIO);
+				}
+				if(rb)
+				{
+					size_t left=size-rb;
+					if(left>SECTOR_LENGTH) left=SECTOR_LENGTH;
+					fprintf(stderr, "left %zu\n", left);
+					memcpy(buf+rb, decodedblk, left);
+					rb+=left;
+				}
+				else
+				{
+					size_t off=offset%SECTOR_LENGTH;
+					fprintf(stderr, "off %zu\n", off);
+					memcpy(buf, decodedblk+off, SECTOR_LENGTH-off);
+					rb=SECTOR_LENGTH-off;
+				}
+				blk++;
+			}
+			pthread_rwlock_unlock(&mx);
+			return(rb);
+		}
 		case 2: // keystream
 			return(-ENOSYS);
 		default:
@@ -199,6 +255,7 @@ int main(int argc, char *argv[])
 	}
 	i_sz=st.st_size;
 	nblk=i_sz/BLOCK_LENGTH-1;
+	fprintf(stderr, "Image has %zu blocks\n", nblk);
 	int fd=open(img, O_RDWR);
 	if(fd<0)
 	{
@@ -227,6 +284,32 @@ int main(int argc, char *argv[])
 		return(1);
 	}
 	fprintf(stderr, "onionmount: '%s' mmap()ed in\n", img);
+	unsigned char headersector[SECTOR_LENGTH];
+	fprintf(stderr, "Enter your layer master passphrase (at most %u bytes will be used)\n", KEY_LENGTH_HIGH);
+	unsigned char passphrase[KEY_LENGTH_HIGH+1];
+	memset(passphrase, 0, KEY_LENGTH_HIGH); // make sure it's initialised to all 0s
+	if(!fgets((char *)passphrase, KEY_LENGTH_HIGH+1, stdin))
+	{
+		perror("Failed to read passphrase: fgets");
+		goto shutdown;
+	}
+	int e;
+	if((e=decrypt_sector(KEY_LENGTH_HIGH, passphrase, im, im+IV_LENGTH, headersector)))
+	{
+		if(e<0) perror("decrypt_sector");
+		else fprintf(stderr, "decrypt_sector failed with code %d\n", e);
+		goto shutdown;
+	}
+	size_t blocklength=read32be(headersector);
+	if(blocklength!=BLOCK_LENGTH)
+	{
+		fprintf(stderr, "Bad image: blocklength is %zu, expected %zu\n", blocklength, BLOCK_LENGTH);
+		goto shutdown;
+	}
+	header.key_size=read32be(headersector+0x4);
+	header.key_len=read32be(headersector+0x8);
+	header.key_stride=read32be(headersector+0xC);
+	header.key_data=headersector+0x10;
 	
 	int rv=EXIT_FAILURE;
 	int fargc=argc-1;
@@ -236,6 +319,7 @@ int main(int argc, char *argv[])
 		fargv[i]=argv[i+1];
 	
 	rv=fuse_main(fargc, fargv, &onion_oper, NULL);
+	shutdown:
 	pthread_rwlock_wrlock(&mx);
 	munmap(im, i_sz);
 	flock(fd, LOCK_UN);
