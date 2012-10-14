@@ -125,11 +125,6 @@ int main(int argc, char *argv[])
 		return(1);
 	}
 	fprintf(stderr, "Image size is %zu bytes\n", sz);
-	if(sz%BLOCK_LENGTH)
-	{
-		fprintf(stderr, "Error - image size not a multiple of BLOCK_LENGTH %zu\n", BLOCK_LENGTH);
-		return(1);
-	}
 	size_t nblk=sz/BLOCK_LENGTH-1;
 	fprintf(stderr, "Image has %zu blocks\n", nblk);
 	fprintf(stderr, "Enter your layer master passphrase (at most %u bytes will be used)\n", KEY_LENGTH_HIGH);
