@@ -2,7 +2,7 @@
 
 CC := gcc
 CFLAGS := -Wall -Wextra -Werror -pedantic --std=gnu99 -g
-CPPFLAGS := -DINSUFFICIENTLY_PARANOID # this is temporary, for debugging/development
+#CPPFLAGS := -DINSUFFICIENTLY_PARANOID # this is temporary, for debugging/development
 FUSE := `pkg-config fuse --cflags` -Wno-unused
 LDFUSE := `pkg-config fuse --libs`
 LDCRYPTO := -lssl

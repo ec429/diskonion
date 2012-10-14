@@ -1,0 +1,6 @@
+To mount the test layer 1 volume, use
+mkdir mnt && ./onionmount test mnt # Password is "Fish"
+To mount the layer 2 volume, use
+mkdir mnt2 && ./onionmount mnt/keystream mnt2 # Password is Barf
+If there were a layer 3 volume, you would use
+mkdir mnt3 && ./onionmount mnt2/keystream mnt3 # and a third password would be needed

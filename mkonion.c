@@ -42,8 +42,8 @@
 #include "onion.h"
 #include "bits.h"
 
-#define SECTOR_KEY_LENGTH	(SECTOR_LENGTH-0x10) // should be 4064
-#define SECTOR_KEY_STRIDE	13 // coprime to 4064
+#define SECTOR_KEY_LENGTH	(SECTOR_LENGTH-0x10) // should be 480
+#define SECTOR_KEY_STRIDE	13 // coprime to 480
 
 int main(int argc, char *argv[])
 {

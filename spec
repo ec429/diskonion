@@ -14,16 +14,16 @@ The layer (which is generic, ie. all the layers are provided by the same program
 Finally note that there is no reason for the layer to provide filesystem primitives, when it can simply present a filesystem image as the data file, which can then be mounted by eg. a loop device.  However, a reasonable means of implementation is by a userspace filesystem (eg. with FUSE) which presents two files under its mountpoint, say /data and /keystream.
 
 Description of the Implementation Format:
-The data file is partitioned into /sectors/ of 4080 bytes (4096 bytes - 128 bits).  Then, for each sector, a random 128-bit IV is generated, and used with the derived sector key to encrypt the sector with AES in CBC mode.  The IV is prepended to the ciphertext to produce a 4096 byte block.
-The image as a whole consists of a header block followed by these cipher blocks in order.  The header block is 4096 bytes, and contains the header sector, encrypted in the same way as any other sector (so the header sector is only 4080 bytes) except that the layer master key (rather than the layer sector key) is used to encrypt it.  The header sector contains the following information (all encoded big-endian):
+The data file is partitioned into /sectors/ of 496 bytes (512 bytes - 128 bits).  Then, for each sector, a random 128-bit IV is generated, and used with the derived sector key to encrypt the sector with AES in CBC mode.  The IV is prepended to the ciphertext to produce a 512 byte block.
+The image as a whole consists of a header block followed by these cipher blocks in order.  The header block is 512 bytes, and contains the header sector, encrypted in the same way as any other sector (so the header sector is only 496 bytes) except that the layer master key (rather than the layer sector key) is used to encrypt it.  The header sector contains the following information (all encoded big-endian):
 Offset	Length	Meaning
-0x0000	4		Block length in bytes (currently fixed at 4096, 0x1000)
+0x0000	4		Block length in bytes (currently fixed at 512, 0x200)
 0x0004	4		Sector key size in bytes (typically 16/24/32, for 128/192/256 bit AES) (B)
-0x0008	4		Sector key length in bytes (maximum 4064) (L)
+0x0008	4		Sector key length in bytes (maximum 480) (L)
 0x000C	4		Sector key stride in bytes (S)
 0x0010	L		Sector key data
 The derived sector key is produced by taking the sector index (i) and computing R=i*S mod L; then the key is B bytes from the sector key data starting at offset R and wrapping around if necessary.  This extra obfuscatory step is included in an attempt to offset the reduction in security resulting from constraining the IVs (which constraint increases the chance of related or even colliding sector IVs), since an IV collision isn't a problem if the keys are different.  Typically L and S should be chosen to be coprime to ensure that all the possible derived sector keys are used.  However, an implementation is permitted to set L:=B and S:=0 thereby allowing it to ignore sector key derivation and precompute the AES round keys just once, using them for the life of the mount (this isn't advised, though, as AES key expansion isn't particularly expensive).
-The keystream consists of a 64-bit block for each 4096-byte block in the image (excluding the header block), produced from the sector IV as follows: the nth byte of the keystream block is the XOR of the (2n)th and (2n+1)th bytes of the IV (where byte indices start from zero).
+The keystream consists of a 64-bit block for each 512-byte block in the image (excluding the header block), produced from the sector IV as follows: the nth byte of the keystream block is the XOR of the (2n)th and (2n+1)th bytes of the IV (where byte indices start from zero).
 An important feature of the format is that the image is indistinguishable from random data; thus, without a key to decrypt it (or a practical attack on the underlying cryptosystem AES), a keystream file cannot be determined to carry (or not carry) an image.  It is for this reason that the image does not have any kind of header 'in the clear'.
 
 Implementation notes:

@@ -36,7 +36,7 @@
 #include <openssl/aes.h>
 
 // These lengths are in bytes (not bits as is common in many crypto contexts)
-#define BLOCK_LENGTH	4096
+#define BLOCK_LENGTH	512
 #define IV_LENGTH		AES_BLOCK_SIZE
 #define KS_BLKLEN		(IV_LENGTH/2)
 #define SECTOR_LENGTH	(BLOCK_LENGTH-IV_LENGTH)
