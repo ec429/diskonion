@@ -1,3 +1,5 @@
+Get the test volume from http://jttlov.no-ip.org/cruft/test
+
 To mount the test layer 1 volume, use
 mkdir mnt && ./onionmount test mnt # Password is "Fish"
 To mount the layer 2 volume, use
