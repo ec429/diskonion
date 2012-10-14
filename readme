@@ -4,3 +4,21 @@ To mount the layer 2 volume, use
 mkdir mnt2 && ./onionmount mnt/keystream mnt2 # Password is Barf
 If there were a layer 3 volume, you would use
 mkdir mnt3 && ./onionmount mnt2/keystream mnt3 # and a third password would be needed
+Of course, you can create one, with
+./mkonion -omnt2/keystream
+(which, if there were one already present, would overwrite it completely).
+Or you can create a new layer 1 volume to play with:
+./mkonion -onewtest -Ms64
+would create a 64MB volume "newtest".  The size switches are -s (bytes), -ks (kilobytes), -Ms (megabytes) and -Gs (gigabytes); there's also "+s" to use the existing size of the file (which is the default behaviour, and which behaviour is desired when creating a volume in a keystream file).  Remember that each layer will be about 64 times smaller than the one before it (ie. 16 bytes in the kilobyte), so a layer 3 volume is 256 bytes in the layer 1 megabyte, and a layer 4 volume yields 4 bytes in the layer 1 megabyte.  Anything beyond this is probably impractical except for extremely small message sizes; this is for two reasons.  The obvious reason is the storage cost - a meg of disk for every 4 bytes stored is rather inefficient!  A more subtle reason is the speed of reads and writes; you will typically have to read every disk sector in that megabyte in order to retrieve those 4 bytes, because of the way the keystream is interleaved with the data in each layer.  Fortunately, this /won't/ necessarily incur huge seek costs, since you'll be doing that read more-or-less sequentially - so as long as the layer 1 volume is a contiguous file on disk, you won't be seeking back and forth.  Unfortunately, it gets worse on write, because the IV regeneration process means that you will have to read, decrypt, re-encrypt, and write every byte all the way down to layer 1.  Though there is some relief: the presence of higher layers doesn't slow down lower layers (if it did, that would be a pretty big giveaway that they were there), so your super-top-secret-quadruple-bucky-confidential data stored in layer 42 won't affect your day-to-day use of the bank details you've stored in layer 2.
+
+KNOWN BUGS AND CAVEATS
+
+WARNING!  This software is only a proof of concept and the current implementation is not suitable for production security environments.  One of the many reasons for this is that it makes no effort to secure the keys in memory (for instance, they may be swapped to disk by the operating system).  This risk is probably heightened by the usage of mmap() to access the image.  
+
+The implementation also has some data-loss risks, since an error in many cases leaves the image in an inconsistent state.
+
+Furthermore, it has yet to be established with any degree of confidence whether the use of data (even encrypted data) as keying material in this way is detrimental to the security of the data encrypted with that keying material.
+
+Another pitfall is that, if an adversary can observe the disk both before and after a session in which a given layer was written to, the pattern of block regenerations in lower layers may disclose the presence of that layer; it might be possible to defeat this attack with chaff, namely randomly triggering regenerations in lower layers by writing existing files' data back to them, or it might not.  Alternatively, the operation of the mounted filesystems might be such as to create similar chaff.  Nonetheless, an enhancement that scrambles the order of storage in the keystream by a (preferably cryptographically secure) permutation function would probably improve security and is thus a promising avenue of future research.
+
+Lastly, while the author's tentative hypothesis is that the image file is indistinguishable from random data (or, more precisely, from the random keystream file created by mkonion, whose randomness is dependent on that of /dev/urandom), it is obviously impossible to be confident of this until substantial peer review has occurred.  Deployment of this system is at your own risk.
